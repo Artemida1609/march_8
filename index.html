@@ -90,7 +90,7 @@
   /* Wax seal */
   .env-seal {
     position: absolute;
-    top: clamp(52px,15vw,84px); left: 50%; transform: translateX(-50%) translateY(-30%);
+    top: clamp(52px,15vw,84px); left: 50%; transform: translateX(-50%) translateY(-50%);
     width: clamp(36px,9vw,52px); height: clamp(36px,9vw,52px);
     z-index: 5;
     transition: opacity 0.3s, transform 0.3s;
@@ -524,7 +524,9 @@ function startBouquet(){
   function drawWrapping(p,fy){
     if(p<=0) return;
     const{cw,ct,cb}=getWrappingGeometry(fy);const sc=Math.min(W,H)/460;
-    ctx.save();ctx.globalAlpha=Math.min(1,p*1.5);ctx.translate(cx,cy+fy);
+    const slideEase=t=>1-Math.pow(1-t,3);
+    const slideY=(1-slideEase(Math.min(1,p)))*H*0.55;
+    ctx.save();ctx.globalAlpha=Math.min(1,p*2.5);ctx.translate(cx,cy+fy+slideY);
     ctx.save();ctx.globalAlpha*=.25;ctx.fillStyle='#1a0020';
     ctx.beginPath();ctx.ellipse(6*sc,ct+(cb-ct)*.55,cw*.55,10*sc,0,0,Math.PI*2);ctx.fill();ctx.restore();
     ctx.save();ctx.beginPath();ctx.moveTo(-cw,ct);ctx.lineTo(0,cb);ctx.lineTo(cw,ct);ctx.closePath();
@@ -545,7 +547,9 @@ function startBouquet(){
   function drawWrappingCover(p,fy){
     if(p<=0) return;
     const{cw,ct,cb}=getWrappingGeometry(fy);
-    ctx.save();ctx.globalAlpha=Math.min(1,p*1.5);ctx.translate(cx,cy+fy);
+    const slideEase=t=>1-Math.pow(1-t,3);
+    const slideY=(1-slideEase(Math.min(1,p)))*H*0.55;
+    ctx.save();ctx.globalAlpha=Math.min(1,p*2.5);ctx.translate(cx,cy+fy+slideY);
     ctx.beginPath();ctx.moveTo(-cw,ct);ctx.lineTo(0,cb);ctx.lineTo(cw,ct);ctx.closePath();ctx.clip();
     const bg=ctx.createLinearGradient(-cw,ct,cw,ct);bg.addColorStop(0,'#d4849a');bg.addColorStop(.5,'#e8a0b2');bg.addColorStop(1,'#d4849a');
     ctx.fillStyle=bg;ctx.fillRect(-cw*1.1,ct,cw*2.2,cb-ct+4);
@@ -635,7 +639,9 @@ function startBouquet(){
     if(glowAlpha>0){const sc=Math.min(W,H)/460;const g=ctx.createRadialGradient(cx,cy-30*sc,15,cx,cy-30*sc,170*sc);g.addColorStop(0,`rgba(255,80,130,${.18*glowAlpha})`);g.addColorStop(.5,`rgba(200,30,80,${.07*glowAlpha})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);}
     drawWrapping(wrappingP,0);drawWrappingCover(wrappingP,0);
     const sorted=[...roses].sort((a,b)=>a.ty-b.ty);for(const r of sorted){if(r.alpha<=0)continue;drawRose(r.x,r.y,r.size,r.rotation,r.color,r.alpha,r.bloom);}
-    drawRibbon(ribbonP,bowP,0);drawHearts();
+    const slideEaseD=t=>1-Math.pow(1-t,3);
+    const ribbonSlideY=(1-slideEaseD(Math.min(1,wrappingP)))*H*0.55;
+    drawRibbon(ribbonP,bowP,ribbonSlideY);drawHearts();
   }
 
   function startLoop(){
@@ -648,7 +654,8 @@ function startBouquet(){
         for(const r of roses){const t=Math.max(0,Math.min(1,(el-r.delay)/FLIGHT_DUR)),te=easeInOut(t);r.x=r.sx+(r.tx-r.sx)*te;r.y=r.sy+(r.ty-r.sy)*te;r.alpha=Math.min(1,t*2.2);r.bloom=easeOut(t);r.rotation+=(r.targetRot-r.rotation)*.08;if(t<1)done=false;}
         if(done&&el>1.4)setPhase(2);
       }
-      if(phase>=2){glowAlpha=Math.min(1,glowAlpha+.025);wrappingP=1;}
+      if(phase===1&&el>0.5){wrappingP=Math.min(1,wrappingP+.028);}
+      if(phase>=2){glowAlpha=Math.min(1,glowAlpha+.025);wrappingP=Math.min(1,wrappingP+.035);}
       if(phase===2&&el>.5)setPhase(3);
       if(phase===3){const t=Math.min(1,el/1.1);ribbonP=easeOut(t);bowP=t>.55?easeOut((t-.55)/.45):0;if(t>=1)setPhase(4);}
       if(phase===4){ribbonP=1;bowP=1;if(el>.3)document.getElementById('text-overlay').classList.add('visible');}
