@@ -291,8 +291,6 @@
   </div>
 </div>
 
-<canvas id="keyCanvas"></canvas>
-
 <!-- CARD SCREEN -->
 <div class="screen hidden" id="cardScreen">
   <div class="card-wrap">
@@ -336,6 +334,9 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
     this.closePath(); return this;
   };
 }
+
+// Detect mobile for performance adjustments
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
 
 function showOnly(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
@@ -485,11 +486,12 @@ document.getElementById('flowersBtn').addEventListener('click', function(){
 
 function startBouquet(){
   const canvas=document.getElementById('bouquetCanvas');
-  const ctx=canvas.getContext('2d');
+  const ctx=canvas.getContext('2d', { alpha: false });
   let W,H,cx,cy;
+  // Use lower DPR on mobile for performance
+  const dpr = isMobile ? Math.min(window.devicePixelRatio||1, 1.5) : (window.devicePixelRatio||1);
 
   function resize(){
-    const dpr=window.devicePixelRatio||1;
     W=window.innerWidth; H=window.innerHeight;
     canvas.width=W*dpr; canvas.height=H*dpr;
     canvas.style.width=W+'px'; canvas.style.height=H+'px';
@@ -522,6 +524,7 @@ function startBouquet(){
     return{minX,maxX,rimY:secondY-rr*1.1};
   }
 
+  // Optimized rose drawing — fewer layers on mobile
   function drawRose(x, y, size, rotation, color, alpha, bloom) {
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -532,13 +535,15 @@ function startBouquet(){
     const bp = Math.max(0, Math.min(1, bloom));
     const baseR = 5.5;
 
-    const layers = [
+    const allLayers = [
       { n: 7,  r: baseR*0.55, offsetR: baseR*0.28, tilt: 0.95, sizeX: 0.50, sizeY: 0.62 },
       { n: 8,  r: baseR*0.80, offsetR: baseR*0.40, tilt: 0.72, sizeX: 0.52, sizeY: 0.68 },
       { n: 9,  r: baseR*1.00, offsetR: baseR*0.50, tilt: 0.50, sizeX: 0.54, sizeY: 0.72 },
       { n: 10, r: baseR*1.15, offsetR: baseR*0.57, tilt: 0.28, sizeX: 0.55, sizeY: 0.70 },
       { n: 11, r: baseR*1.25, offsetR: baseR*0.62, tilt: 0.10, sizeX: 0.53, sizeY: 0.65 },
     ];
+    // On mobile, skip last 2 layers for inner petals (still looks great, much faster)
+    const layers = isMobile ? allLayers.slice(0, 3) : allLayers;
 
     layers.forEach((layer, li) => {
       if (bp < li * 0.18) return;
@@ -569,20 +574,23 @@ function startBouquet(){
       }
     });
 
-    for (let i = 0; i < 6; i++) {
-      const angle = (i/6)*Math.PI*2 + 0.25;
-      const r = baseR * 0.30 * bp;
-      ctx.save();
-      ctx.translate(Math.cos(angle)*r*0.3, Math.sin(angle)*r*0.3);
-      ctx.rotate(angle + Math.PI/2);
-      const ig = ctx.createRadialGradient(0,0,0,0,0,r);
-      ig.addColorStop(0, lighten(color, 55));
-      ig.addColorStop(1, lighten(color, 10));
-      ctx.fillStyle = ig;
-      ctx.beginPath();
-      ctx.ellipse(0, -r*0.38, r*0.32, r*0.46, 0, 0, Math.PI*2);
-      ctx.fill();
-      ctx.restore();
+    // Skip inner detail on mobile
+    if (!isMobile) {
+      for (let i = 0; i < 6; i++) {
+        const angle = (i/6)*Math.PI*2 + 0.25;
+        const r = baseR * 0.30 * bp;
+        ctx.save();
+        ctx.translate(Math.cos(angle)*r*0.3, Math.sin(angle)*r*0.3);
+        ctx.rotate(angle + Math.PI/2);
+        const ig = ctx.createRadialGradient(0,0,0,0,0,r);
+        ig.addColorStop(0, lighten(color, 55));
+        ig.addColorStop(1, lighten(color, 10));
+        ctx.fillStyle = ig;
+        ctx.beginPath();
+        ctx.ellipse(0, -r*0.38, r*0.32, r*0.46, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     const cg = ctx.createRadialGradient(0,0,0,0,0,baseR*0.28*bp);
@@ -596,97 +604,195 @@ function startBouquet(){
     ctx.restore();
   }
 
-  function drawWrapping(p,fy){
-    if(p<=0) return;
-    const b=getBouquetBounds(),sc=Math.min(W,H)/460;
-    let cw,ct,cb;
-    if(b){const sp=(b.maxX-b.minX)*.5;cw=sp+18*sc;ct=b.rimY-(cy+fy);cb=ct+cw*1.35;}
-    else{cw=145*sc;ct=55*sc;cb=190*sc;}
-    ctx.save();ctx.globalAlpha=Math.min(1,p*1.5);ctx.translate(cx,cy+fy);
-    ctx.save();ctx.globalAlpha*=.25;ctx.fillStyle='#1a0020';
-    ctx.beginPath();ctx.ellipse(6*sc,cb+8*sc,cw*.65,10*sc,0,0,Math.PI*2);ctx.fill();ctx.restore();
-    ctx.save();ctx.beginPath();
-    ctx.moveTo(-cw*1.05,ct);ctx.bezierCurveTo(-cw*1.05,ct+20*sc,-12*sc,cb-15*sc,-10*sc,cb);
-    ctx.lineTo(10*sc,cb);ctx.bezierCurveTo(12*sc,cb-15*sc,cw*1.05,ct+20*sc,cw*1.05,ct);ctx.closePath();
-    const bg=ctx.createLinearGradient(-cw,ct,cw,ct);
-    bg.addColorStop(0,'#d4849a');bg.addColorStop(.5,'#e8a0b2');bg.addColorStop(1,'#d4849a');
-    ctx.fillStyle=bg;ctx.fill();ctx.restore();
-    ctx.save();ctx.beginPath();ctx.moveTo(-cw,ct);ctx.bezierCurveTo(-cw,ct+25*sc,-10*sc,cb-20*sc,-8*sc,cb);
-    ctx.lineTo(0,cb);ctx.lineTo(0,ct-10*sc);ctx.closePath();
-    const ll=ctx.createLinearGradient(-cw,0,0,0);
-    ll.addColorStop(0,'#c4748a');ll.addColorStop(.6,'#f0b0c5');ll.addColorStop(1,'#fad0df');
-    ctx.fillStyle=ll;ctx.fill();ctx.restore();
-    ctx.save();ctx.beginPath();ctx.moveTo(cw,ct);ctx.bezierCurveTo(cw,ct+25*sc,10*sc,cb-20*sc,8*sc,cb);
-    ctx.lineTo(0,cb);ctx.lineTo(0,ct-10*sc);ctx.closePath();
-    const rl=ctx.createLinearGradient(0,0,cw,0);
-    rl.addColorStop(0,'#fad0df');rl.addColorStop(.4,'#f0b0c5');rl.addColorStop(1,'#c4748a');
-    ctx.fillStyle=rl;ctx.fill();ctx.restore();
-    ctx.save();ctx.beginPath();ctx.moveTo(-cw,ct);ctx.bezierCurveTo(-cw*.6,ct-22*sc,cw*.6,ct-22*sc,cw,ct);
-    ctx.bezierCurveTo(cw*.6,ct+12*sc,-cw*.6,ct+12*sc,-cw,ct);ctx.closePath();
-    const rg=ctx.createLinearGradient(-cw,ct-20*sc,cw,ct+10*sc);
-    rg.addColorStop(0,'#fce0ea');rg.addColorStop(.3,'#f8c8d8');rg.addColorStop(.7,'#fce0ea');rg.addColorStop(1,'#ebb0c4');
-    ctx.fillStyle=rg;ctx.shadowColor='rgba(200,80,120,.3)';ctx.shadowBlur=6*sc;ctx.fill();ctx.restore();
-    ctx.restore();
+  // Fixed wrapping — triangle extends to bottom of screen
+  function getWrappingGeometry(fy) {
+    const b = getBouquetBounds();
+    const sc = Math.min(W,H)/460;
+    let cw, ct, cb;
+    if (b) {
+      const sp = (b.maxX - b.minX) * 0.5;
+      cw = sp + 18*sc;
+      ct = b.rimY - (cy + fy);
+      // Extend tip far below screen so triangle is never clipped
+      cb = ct + cw * 2.8;
+    } else {
+      cw = 145*sc; ct = 55*sc; cb = ct + 380*sc;
+    }
+    return { cw, ct, cb };
   }
 
-  function drawWrappingCover(p,fy){
-    if(p<=0) return;
-    const b=getBouquetBounds(),sc=Math.min(W,H)/460;
-    let cw,ct,cb;
-    if(b){const sp=(b.maxX-b.minX)*.5;cw=sp+18*sc;ct=b.rimY-(cy+fy);cb=ct+cw*1.35;}
-    else{cw=145*sc;ct=55*sc;cb=190*sc;}
-    ctx.save();ctx.globalAlpha=Math.min(1,p*1.5);ctx.translate(cx,cy+fy);
+  function drawWrapping(p, fy) {
+    if (p <= 0) return;
+    const { cw, ct, cb } = getWrappingGeometry(fy);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, p * 1.5);
+    ctx.translate(cx, cy + fy);
+
+    // Shadow
+    ctx.save();
+    ctx.globalAlpha *= 0.25;
+    ctx.fillStyle = '#1a0020';
     ctx.beginPath();
-    ctx.moveTo(-cw*1.05,ct);ctx.bezierCurveTo(-cw*1.05,ct+20*sc,-12*sc,cb-15*sc,-10*sc,cb);
-    ctx.lineTo(10*sc,cb);ctx.bezierCurveTo(12*sc,cb-15*sc,cw*1.05,ct+20*sc,cw*1.05,ct);ctx.closePath();ctx.clip();
-    const bg=ctx.createLinearGradient(-cw,ct,cw,ct);
-    bg.addColorStop(0,'#d4849a');bg.addColorStop(.5,'#e8a0b2');bg.addColorStop(1,'#d4849a');
-    ctx.fillStyle=bg;ctx.fillRect(-cw*1.1,ct,cw*2.2,cb-ct+4*sc);
-    ctx.save();ctx.beginPath();ctx.moveTo(-cw,ct);ctx.bezierCurveTo(-cw,ct+25*sc,-10*sc,cb-20*sc,-8*sc,cb);
-    ctx.lineTo(0,cb);ctx.lineTo(0,ct);ctx.closePath();
-    const ll=ctx.createLinearGradient(-cw,0,0,0);
-    ll.addColorStop(0,'#c4748a');ll.addColorStop(.6,'#f0b0c5');ll.addColorStop(1,'#fad0df');
-    ctx.fillStyle=ll;ctx.fill();ctx.restore();
-    ctx.save();ctx.beginPath();ctx.moveTo(cw,ct);ctx.bezierCurveTo(cw,ct+25*sc,10*sc,cb-20*sc,8*sc,cb);
-    ctx.lineTo(0,cb);ctx.lineTo(0,ct);ctx.closePath();
-    const rl=ctx.createLinearGradient(0,0,cw,0);
-    rl.addColorStop(0,'#fad0df');rl.addColorStop(.4,'#f0b0c5');rl.addColorStop(1,'#c4748a');
-    ctx.fillStyle=rl;ctx.fill();ctx.restore();
+    ctx.ellipse(6*(Math.min(W,H)/460), ct + (cb-ct)*0.55, cw*0.55, 10*(Math.min(W,H)/460), 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    // Main cone shape — straight sides meeting at a point
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-cw, ct);
+    ctx.lineTo(0, cb);
+    ctx.lineTo(cw, ct);
+    ctx.closePath();
+    const bg = ctx.createLinearGradient(-cw, ct, cw, ct);
+    bg.addColorStop(0, '#d4849a');
+    bg.addColorStop(0.5, '#e8a0b2');
+    bg.addColorStop(1, '#d4849a');
+    ctx.fillStyle = bg;
+    ctx.fill();
+    ctx.restore();
+
+    // Left shading
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-cw, ct);
+    ctx.lineTo(0, cb);
+    ctx.lineTo(0, ct);
+    ctx.closePath();
+    const ll = ctx.createLinearGradient(-cw, 0, 0, 0);
+    ll.addColorStop(0, '#c4748a');
+    ll.addColorStop(0.6, '#f0b0c5');
+    ll.addColorStop(1, '#fad0df');
+    ctx.fillStyle = ll;
+    ctx.fill();
+    ctx.restore();
+
+    // Right shading
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cw, ct);
+    ctx.lineTo(0, cb);
+    ctx.lineTo(0, ct);
+    ctx.closePath();
+    const rl = ctx.createLinearGradient(0, 0, cw, 0);
+    rl.addColorStop(0, '#fad0df');
+    rl.addColorStop(0.4, '#f0b0c5');
+    rl.addColorStop(1, '#c4748a');
+    ctx.fillStyle = rl;
+    ctx.fill();
+    ctx.restore();
+
+    // Top rim (folded edge)
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-cw, ct);
+    ctx.bezierCurveTo(-cw*0.6, ct-22*(Math.min(W,H)/460), cw*0.6, ct-22*(Math.min(W,H)/460), cw, ct);
+    ctx.bezierCurveTo(cw*0.6, ct+12*(Math.min(W,H)/460), -cw*0.6, ct+12*(Math.min(W,H)/460), -cw, ct);
+    ctx.closePath();
+    const rg = ctx.createLinearGradient(-cw, ct-20*(Math.min(W,H)/460), cw, ct+10*(Math.min(W,H)/460));
+    rg.addColorStop(0, '#fce0ea');
+    rg.addColorStop(0.3, '#f8c8d8');
+    rg.addColorStop(0.7, '#fce0ea');
+    rg.addColorStop(1, '#ebb0c4');
+    ctx.fillStyle = rg;
+    ctx.shadowColor = 'rgba(200,80,120,.3)';
+    ctx.shadowBlur = 6*(Math.min(W,H)/460);
+    ctx.fill();
+    ctx.restore();
+
     ctx.restore();
   }
 
-  function drawRibbon(rp,bp,fy){
-    if(rp<=0) return;
-    const b=getBouquetBounds(),sc=Math.min(W,H)/460;
-    let ry,width;
-    if(b){
-      const sp=(b.maxX-b.minX)*.5,cw=sp+18*sc,ct=b.rimY-(cy+fy),ch=cw*1.35;
-      ry=cy+fy+ct+ch*.40;
-      const tt=(ry-(cy+fy+ct))/ch;
-      width=cw*(1-tt*.9)*rp;
-    } else {ry=cy+140*sc+fy;width=105*sc*rp;}
-    const bx=cx,by=ry;
-    ctx.save();ctx.globalAlpha=Math.min(1,rp*2);
-    const rg=ctx.createLinearGradient(bx-width,by,bx+width,by);
-    rg.addColorStop(0,'#aa0040');rg.addColorStop(.3,'#ee1155');rg.addColorStop(.5,'#ff6699');rg.addColorStop(.7,'#ee1155');rg.addColorStop(1,'#aa0040');
-    ctx.fillStyle=rg;ctx.shadowColor='#ff3377';ctx.shadowBlur=10*sc;
-    const rh=8*sc;ctx.roundRect(bx-width,by-rh/2,width*2,rh,rh/2);ctx.fill();
-    ctx.shadowBlur=4*sc;ctx.fillStyle='#ff88bb';ctx.beginPath();ctx.ellipse(bx,by,9*sc,7*sc,0,0,Math.PI*2);ctx.fill();
-    if(bp>0){
-      const bs=26*sc*bp;
-      for(let s=-1;s<=1;s+=2){
-        ctx.save();ctx.translate(bx+s*5*sc,by);
-        const bg=ctx.createRadialGradient(s*bs*.35,-bs*.28,0,0,0,bs*1.1);
-        bg.addColorStop(0,'#ff99cc');bg.addColorStop(.5,'#ee1155');bg.addColorStop(1,'#990033');
-        ctx.fillStyle=bg;ctx.globalAlpha=Math.min(1,rp*2)*.92;
-        ctx.beginPath();ctx.moveTo(0,0);ctx.bezierCurveTo(s*bs*.25,-bs*.9,s*bs*1.05,-bs*.55,s*bs*.88,0);
-        ctx.bezierCurveTo(s*bs*.65,bs*.38,s*bs*.18,bs*.28,0,0);ctx.fill();ctx.restore();
+  // Cover for clip — same triangle
+  function drawWrappingCover(p, fy) {
+    if (p <= 0) return;
+    const { cw, ct, cb } = getWrappingGeometry(fy);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, p * 1.5);
+    ctx.translate(cx, cy + fy);
+
+    ctx.beginPath();
+    ctx.moveTo(-cw, ct);
+    ctx.lineTo(0, cb);
+    ctx.lineTo(cw, ct);
+    ctx.closePath();
+    ctx.clip();
+
+    const bg = ctx.createLinearGradient(-cw, ct, cw, ct);
+    bg.addColorStop(0, '#d4849a');
+    bg.addColorStop(0.5, '#e8a0b2');
+    bg.addColorStop(1, '#d4849a');
+    ctx.fillStyle = bg;
+    ctx.fillRect(-cw*1.1, ct, cw*2.2, cb - ct + 4);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-cw, ct); ctx.lineTo(0, cb); ctx.lineTo(0, ct); ctx.closePath();
+    const ll = ctx.createLinearGradient(-cw, 0, 0, 0);
+    ll.addColorStop(0, '#c4748a'); ll.addColorStop(0.6, '#f0b0c5'); ll.addColorStop(1, '#fad0df');
+    ctx.fillStyle = ll; ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cw, ct); ctx.lineTo(0, cb); ctx.lineTo(0, ct); ctx.closePath();
+    const rl = ctx.createLinearGradient(0, 0, cw, 0);
+    rl.addColorStop(0, '#fad0df'); rl.addColorStop(0.4, '#f0b0c5'); rl.addColorStop(1, '#c4748a');
+    ctx.fillStyle = rl; ctx.fill();
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  function drawRibbon(rp, bp, fy) {
+    if (rp <= 0) return;
+    const b = getBouquetBounds();
+    const sc = Math.min(W,H)/460;
+    let ry, width;
+    if (b) {
+      const { cw, ct, cb } = getWrappingGeometry(fy);
+      const ch = cb - ct;
+      ry = cy + fy + ct + ch * 0.28;
+      const tt = (ry - (cy + fy + ct)) / ch;
+      width = cw * (1 - tt * 0.9) * rp;
+    } else {
+      ry = cy + 140*sc + fy;
+      width = 105*sc * rp;
+    }
+    const bx = cx, by = ry;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, rp * 2);
+    const rg = ctx.createLinearGradient(bx-width, by, bx+width, by);
+    rg.addColorStop(0,'#aa0040'); rg.addColorStop(0.3,'#ee1155');
+    rg.addColorStop(0.5,'#ff6699'); rg.addColorStop(0.7,'#ee1155'); rg.addColorStop(1,'#aa0040');
+    ctx.fillStyle = rg;
+    ctx.shadowColor = '#ff3377'; ctx.shadowBlur = 10*sc;
+    const rh = 8*sc;
+    ctx.roundRect(bx-width, by-rh/2, width*2, rh, rh/2);
+    ctx.fill();
+    ctx.shadowBlur = 4*sc;
+    ctx.fillStyle = '#ff88bb';
+    ctx.beginPath(); ctx.ellipse(bx, by, 9*sc, 7*sc, 0, 0, Math.PI*2); ctx.fill();
+    if (bp > 0) {
+      const bs = 26*sc*bp;
+      for (let s=-1; s<=1; s+=2) {
+        ctx.save(); ctx.translate(bx+s*5*sc, by);
+        const bg = ctx.createRadialGradient(s*bs*.35, -bs*.28, 0, 0, 0, bs*1.1);
+        bg.addColorStop(0,'#ff99cc'); bg.addColorStop(0.5,'#ee1155'); bg.addColorStop(1,'#990033');
+        ctx.fillStyle = bg; ctx.globalAlpha = Math.min(1, rp*2) * 0.92;
+        ctx.beginPath(); ctx.moveTo(0,0);
+        ctx.bezierCurveTo(s*bs*.25,-bs*.9,s*bs*1.05,-bs*.55,s*bs*.88,0);
+        ctx.bezierCurveTo(s*bs*.65,bs*.38,s*bs*.18,bs*.28,0,0);
+        ctx.fill(); ctx.restore();
       }
-      if(bp>.55){
-        const tp=Math.min(1,(bp-.55)/.45);
-        ctx.globalAlpha=Math.min(1,rp*2)*tp;ctx.strokeStyle='#dd1155';ctx.lineWidth=5*sc;ctx.lineCap='round';ctx.shadowBlur=5*sc;
-        for(let s=-1;s<=1;s+=2){
-          ctx.beginPath();ctx.moveTo(bx,by);ctx.bezierCurveTo(bx+s*18*sc,by+16*sc*tp,bx+s*12*sc,by+42*sc*tp,bx+s*22*sc,by+55*sc*tp);ctx.stroke();
+      if (bp > 0.55) {
+        const tp = Math.min(1, (bp-.55)/.45);
+        ctx.globalAlpha = Math.min(1, rp*2) * tp;
+        ctx.strokeStyle = '#dd1155'; ctx.lineWidth = 5*sc; ctx.lineCap = 'round'; ctx.shadowBlur = 5*sc;
+        for (let s=-1; s<=1; s+=2) {
+          ctx.beginPath(); ctx.moveTo(bx, by);
+          ctx.bezierCurveTo(bx+s*18*sc,by+16*sc*tp,bx+s*12*sc,by+42*sc*tp,bx+s*22*sc,by+55*sc*tp);
+          ctx.stroke();
         }
       }
     }
@@ -696,19 +802,15 @@ function startBouquet(){
   function getLayout(){
     const sc=Math.min(W,H)/460;
     return[
-      // Row 1 (top): 1
       {x:0,   y:-88, s:1.12, r:0},
-      // Row 2: 3
       {x:-32, y:-65, s:1.06, r:-.18},
       {x:0,   y:-62, s:1.08, r:.02},
       {x:32,  y:-65, s:1.06, r:.18},
-      // Row 3: 5
       {x:-62, y:-38, s:1.00, r:-.36},
       {x:-30, y:-34, s:1.03, r:-.14},
       {x:0,   y:-30, s:1.06, r:.00},
       {x:30,  y:-34, s:1.03, r:.14},
       {x:62,  y:-38, s:1.00, r:.36},
-      // Row 4 (bottom): 6
       {x:-74, y:-6,  s:.93, r:-.48},
       {x:-44, y:-2,  s:.96, r:-.26},
       {x:-14, y:2,   s:.99, r:-.08},
@@ -723,144 +825,174 @@ function startBouquet(){
 
   const COLORS=['#cc1133','#d91a3a','#e02040','#c40f2a','#dd1535','#e82545','#b80e28','#cf1232','#e01838','#d61a3c','#c00e2c','#da1840','#e52242','#bb0f2e','#d01535'];
 
-  let phase=0,phaseStart=0,frame=0,ribbonP=0,bowP=0,glowAlpha=0,hintHidden=false;
-  let rafId=null, needsRedraw=true;
+  let phase=0, phaseStart=0, frame=0, ribbonP=0, bowP=0, glowAlpha=0, hintHidden=false;
+  let rafId=null;
+
+  // Hearts pool — limited on mobile
+  const MAX_HEARTS = isMobile ? 30 : 80;
   const hearts=[];
 
-  function spawnHearts(x,y,n=7){
-    for(let i=0;i<n;i++){
-      hearts.push({x,y,vx:(Math.random()-.5)*3.5,vy:-Math.random()*3.5-1.5,alpha:1,size:Math.random()*16+8,rot:(Math.random()-.5)*.8,life:0,maxLife:70+Math.random()*60,color:Math.random()>.4?'#ff4488':Math.random()>.5?'#ff88bb':'#ffccdd',wobble:Math.random()*Math.PI*2});
+  function spawnHearts(x, y, n=7) {
+    // On mobile, spawn fewer hearts
+    const count = isMobile ? Math.min(4, n) : n;
+    // Trim pool if needed
+    while (hearts.length + count > MAX_HEARTS) hearts.shift();
+    for (let i=0; i<count; i++) {
+      hearts.push({
+        x, y,
+        vx: (Math.random()-.5)*3.5,
+        vy: -Math.random()*3.5-1.5,
+        alpha: 1,
+        size: Math.random()*16+8,
+        rot: (Math.random()-.5)*.8,
+        life: 0,
+        maxLife: 55 + Math.random()*40,
+        color: Math.random()>.4?'#ff4488':Math.random()>.5?'#ff88bb':'#ffccdd',
+        wobble: Math.random()*Math.PI*2
+      });
     }
-    if(!hintHidden){hintHidden=true;document.getElementById('bouquet-hint').classList.add('hide');}
-    if(!rafId) startLoop();
+    if (!hintHidden) { hintHidden=true; document.getElementById('bouquet-hint').classList.add('hide'); }
+    if (!rafId) startLoop();
   }
 
   function drawHeart(x,y,sz,rot,col,alpha){
-    ctx.save();ctx.globalAlpha=alpha;ctx.translate(x,y);ctx.rotate(rot);ctx.scale(sz/10,sz/10);
+    ctx.save(); ctx.globalAlpha=alpha; ctx.translate(x,y); ctx.rotate(rot); ctx.scale(sz/10,sz/10);
     ctx.fillStyle=col;
-    ctx.beginPath();ctx.moveTo(0,-3.5);
-    ctx.bezierCurveTo(0,-6,-5,-6,-5,-2.5);ctx.bezierCurveTo(-5,.5,0,4,0,6.5);
-    ctx.bezierCurveTo(0,4,5,.5,5,-2.5);ctx.bezierCurveTo(5,-6,0,-6,0,-3.5);
-    ctx.closePath();ctx.fill();ctx.restore();
+    ctx.beginPath(); ctx.moveTo(0,-3.5);
+    ctx.bezierCurveTo(0,-6,-5,-6,-5,-2.5); ctx.bezierCurveTo(-5,.5,0,4,0,6.5);
+    ctx.bezierCurveTo(0,4,5,.5,5,-2.5); ctx.bezierCurveTo(5,-6,0,-6,0,-3.5);
+    ctx.closePath(); ctx.fill(); ctx.restore();
   }
+
   function updateHearts(){
-    for(let i=hearts.length-1;i>=0;i--){
-      const h=hearts[i];h.life++;
+    for (let i=hearts.length-1; i>=0; i--) {
+      const h=hearts[i]; h.life++;
       h.x+=h.vx+Math.sin(h.life*.12+h.wobble)*.4;
-      h.y+=h.vy;h.vy+=.06;h.vx*=.97;h.rot+=.03;
+      h.y+=h.vy; h.vy+=.06; h.vx*=.97; h.rot+=.03;
       h.alpha=Math.max(0,1-h.life/h.maxLife);
-      if(h.life>=h.maxLife)hearts.splice(i,1);
+      if (h.life>=h.maxLife) hearts.splice(i,1);
     }
   }
-  function drawHearts(){for(const h of hearts)drawHeart(h.x,h.y,h.size,h.rot,h.color,h.alpha);}
+  function drawHearts(){ for(const h of hearts) drawHeart(h.x,h.y,h.size,h.rot,h.color,h.alpha); }
 
-  // Static background — draw once
-  let bgDrawn=false;
   function drawBackground(){
-    if(bgDrawn) return;
     const g=ctx.createRadialGradient(cx,cy*.65,40,cx,cy*.65,Math.max(W,H)*.9);
-    g.addColorStop(0,'#1e0030');g.addColorStop(.45,'#0e0020');g.addColorStop(1,'#050008');
-    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-    bgDrawn=true;
+    g.addColorStop(0,'#1e0030'); g.addColorStop(.45,'#0e0020'); g.addColorStop(1,'#050008');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
   }
 
   function initBouquet(){
     const layout=getLayout(); roses=[];
-    for(let i=0;i<15;i++){
-      const ang=Math.random()*Math.PI*2,dist=Math.max(W,H)*.72+Math.random()*180;
-      const sx=cx+Math.cos(ang)*dist,sy=cy+Math.sin(ang)*dist;
-      roses.push({sx,sy,x:sx,y:sy,tx:layout[i].x,ty:layout[i].y,size:layout[i].size,
-        rotation:layout[i].rotation+(Math.random()-.5)*.6,targetRot:layout[i].rotation,
-        color:COLORS[i],alpha:0,bloom:0,delay:i*.058,hitR:layout[i].hitR});
+    // Faster flight-in on mobile
+    const delayMult = isMobile ? 0.04 : 0.058;
+    for (let i=0; i<15; i++) {
+      const ang=Math.random()*Math.PI*2;
+      const dist=Math.max(W,H)*.72+Math.random()*180;
+      const sx=cx+Math.cos(ang)*dist, sy=cy+Math.sin(ang)*dist;
+      roses.push({
+        sx, sy, x:sx, y:sy,
+        tx:layout[i].x, ty:layout[i].y,
+        size:layout[i].size,
+        rotation:layout[i].rotation+(Math.random()-.5)*.6,
+        targetRot:layout[i].rotation,
+        color:COLORS[i], alpha:0, bloom:0,
+        delay:i*delayMult,
+        hitR:layout[i].hitR
+      });
     }
-    bgDrawn=false;
   }
-  function setPhase(p){phase=p;phaseStart=frame;}
+  function setPhase(p){ phase=p; phaseStart=frame; }
 
   function hitTest(px,py){
-    for(let i=roses.length-1;i>=0;i--){
-      const r=roses[i],dx=px-r.x,dy=py-r.y;
-      if(Math.sqrt(dx*dx+dy*dy)<r.hitR*.85) return i;
+    for (let i=roses.length-1; i>=0; i--) {
+      const r=roses[i], dx=px-r.x, dy=py-r.y;
+      if (Math.sqrt(dx*dx+dy*dy)<r.hitR*.85) return i;
     }
     return -1;
   }
   function handleInteraction(px,py){
-    if(phase<2) return;
+    if (phase<2) return;
     const idx=hitTest(px,py);
-    if(idx>=0){
-      const r=roses[idx];
-      spawnHearts(r.x,r.y,8);
-    } else {
-      spawnHearts(px,py,4);
-    }
+    if (idx>=0) { spawnHearts(roses[idx].x, roses[idx].y, 8); }
+    else { spawnHearts(px, py, 4); }
   }
   canvas.addEventListener('click',e=>handleInteraction(e.clientX,e.clientY));
   canvas.addEventListener('touchstart',e=>{
     e.preventDefault();
-    const t=e.touches[0];handleInteraction(t.clientX,t.clientY);
+    const t=e.touches[0]; handleInteraction(t.clientX,t.clientY);
   },{passive:false});
+
+  // Flight duration — faster on mobile
+  const FLIGHT_DUR = isMobile ? 1.0 : 1.4;
 
   function drawScene(){
     ctx.clearRect(0,0,W,H);
     drawBackground();
 
-    if(glowAlpha>0){
+    if (glowAlpha>0) {
       const sc=Math.min(W,H)/460;
       const g=ctx.createRadialGradient(cx,cy-30*sc,15,cx,cy-30*sc,170*sc);
-      g.addColorStop(0,`rgba(255,80,130,${.18*glowAlpha})`);g.addColorStop(.5,`rgba(200,30,80,${.07*glowAlpha})`);g.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      g.addColorStop(0,`rgba(255,80,130,${.18*glowAlpha})`);
+      g.addColorStop(.5,`rgba(200,30,80,${.07*glowAlpha})`);
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
     }
-    drawWrapping(wrappingP,0);
-    drawWrappingCover(wrappingP,0);
+
+    drawWrapping(wrappingP, 0);
+    drawWrappingCover(wrappingP, 0);
+
     const sorted=[...roses].sort((a,b)=>a.ty-b.ty);
-    for(const r of sorted){
-      if(r.alpha<=0) continue;
+    for (const r of sorted) {
+      if (r.alpha<=0) continue;
       drawRose(r.x,r.y,r.size,r.rotation,r.color,r.alpha,r.bloom);
     }
-    drawRibbon(ribbonP,bowP,0);
+    drawRibbon(ribbonP, bowP, 0);
     drawHearts();
   }
 
   function startLoop(){
-    if(rafId) return;
+    if (rafId) return;
     function loop(){
       frame++;
       const el=(frame-phaseStart)/60;
 
-      if(phase===0&&el>.2){initBouquet();setPhase(1);}
-      if(phase===1){
+      if (phase===0&&el>.2){ initBouquet(); setPhase(1); }
+      if (phase===1){
         let done=true;
-        for(const r of roses){
-          const t=Math.max(0,Math.min(1,(el-r.delay)/1.4)),te=easeInOut(t);
-          r.x=r.sx+(r.tx-r.sx)*te;r.y=r.sy+(r.ty-r.sy)*te;
-          r.alpha=Math.min(1,t*2.2);r.bloom=easeOut(t);
+        for (const r of roses) {
+          const t=Math.max(0,Math.min(1,(el-r.delay)/FLIGHT_DUR)), te=easeInOut(t);
+          r.x=r.sx+(r.tx-r.sx)*te; r.y=r.sy+(r.ty-r.sy)*te;
+          r.alpha=Math.min(1,t*2.2); r.bloom=easeOut(t);
           r.rotation+=(r.targetRot-r.rotation)*.08;
-          if(t<1) done=false;
+          if (t<1) done=false;
         }
-        if(done&&el>1.8) setPhase(2);
+        if (done&&el>1.4) setPhase(2);
       }
-      if(phase>=2){glowAlpha=Math.min(1,glowAlpha+.025);wrappingP=1;}
-      if(phase===2&&el>.5) setPhase(3);
-      if(phase===3){const t=Math.min(1,el/1.1);ribbonP=easeOut(t);bowP=t>.55?easeOut((t-.55)/.45):0;if(t>=1)setPhase(4);}
-      if(phase===4){
-        ribbonP=1;bowP=1;
-        if(el>.3) document.getElementById('text-overlay').classList.add('visible');
+      if (phase>=2){ glowAlpha=Math.min(1,glowAlpha+.025); wrappingP=1; }
+      if (phase===2&&el>.5) setPhase(3);
+      if (phase===3){
+        const t=Math.min(1,el/1.1);
+        ribbonP=easeOut(t);
+        bowP=t>.55?easeOut((t-.55)/.45):0;
+        if (t>=1) setPhase(4);
+      }
+      if (phase===4){
+        ribbonP=1; bowP=1;
+        if (el>.3) document.getElementById('text-overlay').classList.add('visible');
       }
 
       updateHearts();
       drawScene();
 
-      // Stop RAF if nothing is animating
       const animating = phase<4 || hearts.length>0;
-      if(animating){
-        rafId=requestAnimationFrame(loop);
+      if (animating) {
+        rafId = requestAnimationFrame(loop);
       } else {
-        rafId=null;
-        // Draw final static frame once more
+        rafId = null;
         drawScene();
       }
     }
-    rafId=requestAnimationFrame(loop);
+    rafId = requestAnimationFrame(loop);
   }
 
   setPhase(0);
